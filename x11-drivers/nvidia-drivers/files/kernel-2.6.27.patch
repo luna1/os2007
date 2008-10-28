@@ -1,0 +1,85 @@
+diff -Nur a/usr/src/nv/nv.c b/usr/src/nv/nv.c
+--- a/usr/src/nv/nv.c	2008-10-17 12:23:40.000000000 -0300
++++ b/usr/src/nv/nv.c	2008-10-17 12:30:25.000000000 -0300
+@@ -1296,14 +1296,22 @@
+             if (get_cpu() == cpu)
+                 __nv_setup_pat_entries(NULL);
+             else
++            #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
++                smp_call_function(__nv_setup_pat_entries, hcpu, 1);
++            #else
+                 smp_call_function(__nv_setup_pat_entries, hcpu, 1, 1);
++           	#endif
+             put_cpu();
+             break;
+         case CPU_DOWN_PREPARE:
+             if (get_cpu() == cpu)
+                 __nv_restore_pat_entries(NULL);
+             else
++            #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
++                smp_call_function(__nv_restore_pat_entries, hcpu, 1);
++            #else
+                 smp_call_function(__nv_restore_pat_entries, hcpu, 1, 1);
++            #endif
+             put_cpu();
+             break;
+     }
+diff -Nur a/usr/src/nv/nv-linux.h b/usr/src/nv/nv-linux.h
+--- a/usr/src/nv/nv-linux.h	2008-10-17 12:23:40.000000000 -0300
++++ b/usr/src/nv/nv-linux.h	2008-10-17 12:22:55.000000000 -0300
+@@ -104,7 +104,7 @@
+ #endif
+ 
+ #include <linux/spinlock.h>
+-#include <asm/semaphore.h>
++#include <linux/semaphore.h>
+ #include <linux/completion.h>
+ #include <linux/highmem.h>
+ 
+@@ -665,13 +665,21 @@
+ #if defined(preempt_disable)
+     preempt_disable();
+ #endif
++    #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
++    ret = smp_call_function(func, info, 1);
++    #else
+     ret = smp_call_function(func, info, 1, 1);
++    #endif
+     func(info);
+ #if defined(preempt_enable)
+     preempt_enable();
+ #endif
+ #else
++    #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
++    ret = on_each_cpu(func, info, 1);
++    #else
+     ret = on_each_cpu(func, info, 1, 1);
++    #endif
+ #endif
+     return ret;
+ }
+diff -Nur a/usr/src/nv/os-interface.c b/usr/src/nv/os-interface.c
+--- a/usr/src/nv/os-interface.c	2008-10-17 12:23:40.000000000 -0300
++++ b/usr/src/nv/os-interface.c	2008-10-17 12:22:55.000000000 -0300
+@@ -48,7 +48,11 @@
+ #endif
+     local_bh_disable();
+     atomic_set(&os_smp_barrier, 1);
++    #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
++    ret = smp_call_function(ipi_handler, NULL, 0);
++    #else
+     ret = smp_call_function(ipi_handler, NULL, 1, 0);
++    #endif
+ #endif
+     return (ret == 0) ? RM_OK : RM_ERROR;
+ }
+@@ -704,7 +708,7 @@
+     U032 sig
+ )
+ {
+-    return kill_proc(pid, sig, 1) ? RM_ERR_OPERATING_SYSTEM : RM_OK;
++    return send_sig_info(sig, find_task_by_vpid(pid), 0) ? RM_ERR_OPERATING_SYSTEM : RM_OK;
+ }
+ 
+ /*******************************************************************************/
+
